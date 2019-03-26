@@ -1,23 +1,6 @@
-Zero equ 48
-Nine equ 57
-EuronNum equ 110
-OpAdd equ 43
-OpSub equ 45
-OpMulti equ 42
-
-OpB equ 66
-OpC equ 67
-OpD equ 68
-OpE equ 69
-
-OpG equ 71
-OpP equ 80
-
-OpS equ 83
-
 section .bss
-  Sem: resb N*N*8
-  Values: resb N*N*8
+  Sem: resb N*N*8         ; 2dArray of semaphores
+  Values: resb N*N*8      ; 2dArray of values
 
 section .text
   global euron
@@ -25,7 +8,7 @@ section .text
   extern put_value
 
 euron:
-  push rbx                ; Saving initial values of registers
+  push rbx                ; Saving initial values of registers on stack
   push rsp
   push rbp
   push r12
@@ -34,133 +17,121 @@ euron:
   push r15
 
   mov r15, 0              ; How many on stack
-  mov r12, rdi            ; numer euronu
-  mov r13, rsi
+  mov r12, rdi            ; Euron's number
+  mov r13, rsi            ; Position in the string
 
-read_one:
-  cmp byte [r13], Zero
-  jl not_a_digit
-  cmp byte [r13], Nine
+read_one:                 ; Main loop for reading from the string
+  mov r14b, [r13]         ; Current character in the string
+  inc r13                 ; Incrementing position in the string
+
+  cmp r14b, '0'           ; Testing character for beeing in range 0-9
+  jl not_a_digit          ; If it is not a digit test next posibility
+  cmp r14b, '9'
   jg not_a_digit
-  xor r11, r11
-  mov r11b, byte [r13]
+  xor r11, r11            ; In r11b I put current digit
+  mov r11b, r14b
   sub r11, 48
-  push r11
-  inc r15
-  inc r13
+  push r11                ; Pushing digit on the stack
+  inc r15                 ; Extra value on stack
+  jmp read_one            ; Character processed succesfully
+
+not_a_digit:              ; Jump here if character is not a digit
+  cmp r14b, 'n'
+  jne not_euron           ; Test next posibility
+  push r12                ; Add value of Euron on the stack
+  inc r15                 ; Extra value on stack
   jmp read_one
 
-not_a_digit:
-  cmp byte [r13], EuronNum
-  jne not_euron_num
-  push r12
-  inc r15
-  inc r13
-  jmp read_one
-
-not_euron_num:
-  cmp byte [r13], OpAdd
-  jne not_add
+not_euron:
+  cmp r14b, '+'
+  jne not_add             ; Test next posibility
   pop r11
   pop r10
-  add r10, r11
-  push r10
-  dec r15
-  inc r13
+  add r10, r11            ; Popping and adding two values from stack
+  push r10                ; and placing sum on the stack
+  dec r15                 ; One less value on the stack
   jmp read_one
 
 not_add:
-  cmp byte [r13], OpSub
+  cmp r14b, '-'
   jne not_sub
   pop r11
-  neg r11
+  neg r11                 ; Negating top of the stack
   push r11
-  inc r13
   jmp read_one
 
 not_sub:
-  cmp byte [r13], OpMulti
+  cmp r14b, '*'
   jne not_multi
   pop r11
   pop rax
-  imul rax, r11                                 ;IMUL?????
-  push rax
-  dec r15
-  inc r13
+  imul rax, r11           ; Poping two vaues from the stack and multiplying them
+  push rax                ; Result placed on the stack
+  dec r15                 ; One less value on the stack
   jmp read_one
 
 not_multi:
-  cmp byte [r13], OpB
+  cmp r14b, 'B'
   jne not_opB
-  dec r15
-
-  pop rax
-  pop r11
-  cmp r11, 0
+  dec r15                 ; One less value on the stack after this operation
+  pop rax                 ; Top of the stack in rax
+  pop r11                 ; Putting current top of the stack in r11
   push r11
-  jz increment
-  add r13, rax
-  inc r13
-  jmp read_one
-increment:
-  inc r13
+  cmp r11, 0              ; If there is 0 below rax don't move rax positions
+  jz read_one
+  add r13, rax            ; Moving rax position in the string
   jmp read_one
 
 not_opB:
-  cmp byte [r13], OpC
+  cmp r14b, 'C'
   jne not_opC
   pop rax
   dec r15
-  inc r13
   jmp read_one
 
 not_opC:
-  cmp byte [r13], OpD
+  cmp r14b, 'D'
   jne not_opD
   pop rax
   push rax
   push rax
   inc r15
-  inc r13
   jmp read_one
 
 not_opD:
-  cmp byte [r13], OpE
+  cmp r14b, 'E'
   jne not_opE
   pop rax
   pop r11
   push rax
   push r11
-  inc r13
   jmp read_one
 
 not_opE:
-  cmp byte [r13], OpG
+  cmp r14b, 'G'
   jne not_opG
   mov rdi, r12
   align 16
   call get_value
   push rax
   inc r15
-  inc r13
   jmp read_one
 
 not_opG:
-  cmp byte [r13], OpP
+  cmp r14b, 'P'
   jne not_opP
   mov rdi, r12
   pop rsi
   align 16
   call put_value
   dec r15
-  inc r13
   jmp read_one
 
 not_opP:
-  cmp byte [r13], OpS
+  cmp r14b, 'S'
   jne not_opS
-  pop r11               ; Do kogo
-  pop rcx               ; Do zamiany
+  pop r11                 ; Do kogo
+  pop rcx                 ; Do zamiany
 
 
   mov r9, r12
@@ -169,8 +140,8 @@ not_opP:
   shl r9, 3
 
   mov r8, r9
-  add r8, Sem          ; ostateczna pozycja w tablicy Sem
-  add r9, Values        ; ostateczna pozycja w tablicy Values
+  add r8, Sem             ; ostateczna pozycja w tablicy Sem
+  add r9, Values          ; ostateczna pozycja w tablicy Values
 
   xor rbx, rbx
 test_again_set:
@@ -190,7 +161,6 @@ test_again_set:
   add r8, Sem          ; ostateczna pozycja w tablicy Sem
   add r9, Values        ; ostateczna pozycja w tablicy Values
 
-; 1 -(7)-> 3 ALe get więc chcemy z drugiej strony czyli, (8*r12 + r11*N*8)
   mov rbx, 1
 test_again_get:
   mov rax, 1
@@ -200,7 +170,6 @@ test_again_get:
   push qword [r9]
   lock dec qword [r8]
   dec r15
-  inc r13
   jmp read_one
 
 not_opS:
