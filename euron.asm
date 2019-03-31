@@ -110,8 +110,8 @@ not_opD:
 not_opE:
   cmp r14b, 'G'
   jne not_opG
-  mov rdi, r12
-  align 16
+  mov rdi, r12            ; Setting first function argument to Euron number
+  align 16                ; Align before C call
   call get_value
   push rax
   inc r15
@@ -120,9 +120,9 @@ not_opE:
 not_opG:
   cmp r14b, 'P'
   jne not_opP
-  mov rdi, r12
-  pop rsi
-  align 16
+  mov rdi, r12            ; Setting first function argument to Euron number
+  pop rsi                 ; Setting second function argument to top of stack
+  align 16                ; Align before C call
   call put_value
   dec r15
   jmp read_one
@@ -130,45 +130,48 @@ not_opG:
 not_opP:
   cmp r14b, 'S'
   jne not_opS
-  pop r11                 ; Do kogo
-  pop rcx                 ; Do zamiany
 
+  pop rdx                 ; Rdx holds who to trade with
+  pop rcx                 ; Rcx holds value to trade
+
+; Let n be eurons number and x number of euron to trade with
+
+; Explanation of synchronization implemented below
+; Semaphores are initialized with 0
+; For euron to trade values it needs to put it's value in Values[x][n], but in
+; order to do that Sem[x][n] needs to be 0, after setting value it is set to 1
+; In order to get the value from other process Sem[n][x] needs to be equal to 1
+; and after taking value from Values[n][x], Sem[n][x] is set back to 0
 
   mov r9, r12
   imul r9, N
-  add r9, r11
+  add r9, rdx
   shl r9, 3
+  mov r8, r9              ; r8=r9= 8*(n*N+x)
 
-  mov r8, r9
-  add r8, Sem             ; ostateczna pozycja w tablicy Sem
-  add r9, Values          ; ostateczna pozycja w tablicy Values
+  mov r10, rdx
+  imul r10, N
+  add r10, r12
+  shl r10, 3
+  mov r11, r10            ; r10=r11=8*(x*N+n) opposite side of array
 
-  xor rbx, rbx
-test_again_set:
-  xor rax, rax
-  lock cmpxchg [r8], rbx
-  cmp rax, 0
-  jne test_again_set
+  add r8, Sem             ; Position in Sem array for value setting
+  add r9, Values          ; Position in Values array for value setting
+  add r10, Sem            ; Position in Sem array for value getting
+  add r11, Values         ; Position in Values array for value getting
+
+wait_to_set_value:
+  cmp qword [r8], 0
+  jne wait_to_set_value   ; Wait until Sem is 0
   mov qword [r9], rcx
-  lock inc qword [r8]
+  mov qword [r8], 1
 
-  mov r9, r11
-  imul r9, N
-  add r9, r12
-  shl r9, 3
+wait_to_get_value:
+  cmp qword [r10], 1
+  jne wait_to_get_value   ; Wait until Sem is 1
+  push qword [r11]
+  mov qword [r10], 0
 
-  mov r8, r9
-  add r8, Sem          ; ostateczna pozycja w tablicy Sem
-  add r9, Values        ; ostateczna pozycja w tablicy Values
-
-  mov rbx, 1
-test_again_get:
-  mov rax, 1
-  lock cmpxchg [r8], rbx
-  cmp rax, 1
-  jne test_again_get
-  push qword [r9]
-  lock dec qword [r8]
   dec r15
   jmp read_one
 
@@ -176,12 +179,12 @@ not_opS:
   jmp done
 
 done:
-  pop rax
+  pop rax                 ; Top of the stack is a return value of the program
   dec r15
-  shl r15, 3
-  add rsp, r15
+  shl r15, 3              ; Returning previous stack position
+  add rsp, r15            ; by rsp = rsp + (8 * #thingsOnStack)
 
-  pop r15
+  pop r15                 ; Restoring registers
   pop r14
   pop r13
   pop r12
